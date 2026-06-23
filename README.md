@@ -26,11 +26,25 @@ curl http://localhost:8000/health
 
 On first boot, the entrypoint restores `data/startups.db` from `seed/startups.db.gz` when the local database is missing or empty. Nonempty local databases are left alone.
 
+## Datadog versions and preview features
+
+The Python app pins `ddtrace==4.5.0rc1` in `requirements.txt`. The Dockerfile and local test command install that preview tracer from Datadog's build index at `https://dd-trace-py-builds.s3.amazonaws.com/96035140/index.html`.
+
+This tracer version is used for the Prompt Management preview path in `ai_classifier.py`. The classifier calls `LLMObs.get_prompt(..., label="production", fallback=...)` for these prompt IDs:
+
+- `devtools-binary-classifier`
+- `devtools-batch-classifier`
+- `devtools-category-classifier`
+
+If Datadog Prompt Management is unavailable, missing, or fails during local testing, the app falls back to bundled prompt templates and continues running. When Prompt Management works, classifier calls are wrapped in `LLMObs.annotation_context(...)` so prompt metadata is attached to LLM Observability spans.
+
+The Compose stack uses Datadog Agent 7 through `gcr.io/datadoghq/agent:7`. Browser RUM is optional; when RUM credentials are set, the app loads Datadog Browser RUM `v6` unless `DATADOG_RUM_BROWSER_VERSION` overrides it.
+
 ## Datadog signals to look for
 
 Use your Datadog account to check the `agent-observability-sandbox` service in the `sandbox` environment unless you changed those tags. Chatbot and classifier calls should appear under the LLM Observability or Agent Observability app named by `DD_LLMOBS_ML_APP`.
 
-The stack can emit Flask request traces, container logs, runtime metrics, profiler data, LLM spans, and optional RUM sessions.
+The stack can emit Flask request traces, container logs, runtime metrics, profiler data, LLM spans, prompt annotations, and optional RUM sessions.
 
 ## Manual traced scrape
 
