@@ -3,6 +3,18 @@
 from unittest.mock import MagicMock, patch
 
 
+FTS_SPECIAL_CHAR_QUERIES = [
+    "c++",
+    'react*',
+    '"unmatched',
+    "(parens)",
+    "test AND deploy",
+    "metrics, logs, traces.",
+    "feature 'code search'",
+    "***",
+]
+
+
 # --- Bug 4: classify_source(None) should not crash ---
 
 
@@ -18,32 +30,14 @@ def test_classify_source_none_returns_other():
 
 def test_search_startups_fts_special_chars_do_not_crash(fresh_db):
     """FTS5 special characters in search input should not raise OperationalError."""
-    for query in [
-        "c++",
-        'react*',
-        '"unmatched',
-        "(parens)",
-        "test AND deploy",
-        "metrics, logs, traces.",
-        "feature 'code search'",
-        "***",
-    ]:
+    for query in FTS_SPECIAL_CHAR_QUERIES:
         results = fresh_db.search_startups(query)
         assert isinstance(results, list)
 
 
 def test_count_search_results_fts_special_chars_do_not_crash(fresh_db):
     """FTS5 special characters in count query should not raise OperationalError."""
-    for query in [
-        "c++",
-        'react*',
-        '"unmatched',
-        "(parens)",
-        "test AND deploy",
-        "metrics, logs, traces.",
-        "feature 'code search'",
-        "***",
-    ]:
+    for query in FTS_SPECIAL_CHAR_QUERIES:
         count = fresh_db.count_search_results(query)
         assert isinstance(count, int)
 

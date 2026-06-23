@@ -318,11 +318,12 @@ def _manual_search_candidates(queries: list[str]) -> list[dict[str, Any]]:
 
     candidates: list[dict[str, Any]] = []
     for query in queries:
-        results = _search_database(str(query))
+        query_text = str(query)
+        results = _search_database(query_text)
         candidates.extend(results)
         if results:
             continue
-        for term in _search_terms(str(query)):
+        for term in _search_terms(query_text):
             candidates.extend(_search_database(term))
     return _deduplicate_tools(candidates)[:_MAX_TOOLS_IN_CONTEXT]
 
