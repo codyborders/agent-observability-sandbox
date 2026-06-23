@@ -14,7 +14,7 @@ from logging_config import get_logger
 logger = get_logger("devtools.db")
 
 # FTS5 special-character and keyword patterns for query sanitization
-_FTS5_OPERATORS = re.compile(r'["\*\(\)\+\-\^:/\{\}]')
+_FTS5_OPERATORS = re.compile(r"[^\w\s]")
 _FTS5_KEYWORDS = re.compile(r'\b(AND|OR|NOT|NEAR)\b', re.IGNORECASE)
 
 

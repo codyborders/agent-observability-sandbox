@@ -18,14 +18,32 @@ def test_classify_source_none_returns_other():
 
 def test_search_startups_fts_special_chars_do_not_crash(fresh_db):
     """FTS5 special characters in search input should not raise OperationalError."""
-    for query in ["c++", 'react*', '"unmatched', "(parens)", "test AND deploy", "***"]:
+    for query in [
+        "c++",
+        'react*',
+        '"unmatched',
+        "(parens)",
+        "test AND deploy",
+        "metrics, logs, traces.",
+        "feature 'code search'",
+        "***",
+    ]:
         results = fresh_db.search_startups(query)
         assert isinstance(results, list)
 
 
 def test_count_search_results_fts_special_chars_do_not_crash(fresh_db):
     """FTS5 special characters in count query should not raise OperationalError."""
-    for query in ["c++", 'react*', '"unmatched', "(parens)", "test AND deploy", "***"]:
+    for query in [
+        "c++",
+        'react*',
+        '"unmatched',
+        "(parens)",
+        "test AND deploy",
+        "metrics, logs, traces.",
+        "feature 'code search'",
+        "***",
+    ]:
         count = fresh_db.count_search_results(query)
         assert isinstance(count, int)
 

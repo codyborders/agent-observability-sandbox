@@ -44,9 +44,21 @@ _MAX_TOOLS_IN_CONTEXT = _positive_int_env("CHATBOT_MAX_TOOLS", 10)
 _WORKFLOW_NAME = "recommendation_council"
 _COUNCIL_ROLES = {"intent", "search", "evaluator", "skeptic", "writer"}
 _COUNCIL_AGENT_NAMES = sorted(_COUNCIL_ROLES)
+_SEARCH_STOPWORDS = {
+    "and",
+    "for",
+    "from",
+    "recommend",
+    "run",
+    "running",
+    "the",
+    "tool",
+    "tools",
+    "with",
+}
 
 # FTS5 operator pattern to sanitize user-supplied queries
-_FTS5_OPERATORS = re.compile(r'["\*\(\)\+\-\^:/\{\}]')
+_FTS5_OPERATORS = re.compile(r"[^\w\s]")
 _FTS5_KEYWORDS = re.compile(r"\b(AND|OR|NOT|NEAR)\b", re.IGNORECASE)
 
 _SYSTEM_PROMPT = """\
@@ -75,11 +87,9 @@ Do not recommend tools. Do not add markdown.
 
 _SEARCH_PROMPT = """\
 You are SearchAgent in a developer-tools recommendation council.
-Use the search_tools function to search the local database for the provided queries.
-Call search_tools for multiple distinct queries when possible.
-You may call count_tools if the user asks about inventory size.
-After searching, summarize what kinds of candidates were found.
-Never invent tools that did not come from search_tools.
+The application has already searched the local developer-tools database for you.
+Review the provided search queries and candidate tools, then summarize what kinds of candidates were found.
+Never invent tools that are not in the candidate JSON.
 """
 
 _EVALUATOR_PROMPT = """\
@@ -160,6 +170,19 @@ def _sanitize_fts_query(query: str) -> str:
     return " ".join(cleaned.split())
 
 
+def _search_database(query: str) -> list[dict[str, Any]]:
+    """Search the database after sanitizing the query and logging the request."""
+    sanitized = _sanitize_fts_query(query)
+    if not sanitized:
+        return []
+
+    logger.info(
+        "chatbot.search",
+        extra={"event": "chatbot.search", "query": sanitized},
+    )
+    return search_startups(sanitized, limit=_MAX_TOOLS_IN_CONTEXT)
+
+
 @function_tool
 def search_tools(query: str) -> str:
     """Search the developer tools database for tools matching a query.
@@ -167,18 +190,7 @@ def search_tools(query: str) -> str:
     Args:
         query: A search term or phrase to find matching developer tools.
     """
-    sanitized = _sanitize_fts_query(query)
-    if not sanitized:
-        return json.dumps([])
-
-    logger.info(
-        "chatbot.search",
-        extra={"event": "chatbot.search", "query": sanitized},
-    )
-    return json.dumps(
-        search_startups(sanitized, limit=_MAX_TOOLS_IN_CONTEXT),
-        default=str,
-    )
+    return json.dumps(_search_database(query), default=str)
 
 
 @function_tool
@@ -280,8 +292,25 @@ def _queries_from_intent(intent_text: str, user_message: str) -> list[str]:
     return queries[:5]
 
 
+def _search_terms(query: str) -> list[str]:
+    """Extract bounded fallback search terms from a sanitized query."""
+    sanitized = _sanitize_fts_query(query)
+    if not sanitized:
+        return []
+
+    terms: list[str] = []
+    for raw_term in sanitized.split():
+        term = raw_term.lower()
+        if len(term) < 3 or term in _SEARCH_STOPWORDS:
+            continue
+        for candidate in (term, term[:-1] if term.endswith("s") else ""):
+            if candidate and candidate not in terms:
+                terms.append(candidate)
+    return terms[:6]
+
+
 def _manual_search_candidates(queries: list[str]) -> list[dict[str, Any]]:
-    """Search directly when SearchAgent does not produce tool-call output."""
+    """Search directly with full queries, then bounded term fallbacks for recall."""
     if not isinstance(queries, list):
         raise TypeError("queries must be a list")
     if not queries:
@@ -289,10 +318,12 @@ def _manual_search_candidates(queries: list[str]) -> list[dict[str, Any]]:
 
     candidates: list[dict[str, Any]] = []
     for query in queries:
-        sanitized = _sanitize_fts_query(str(query))
-        if not sanitized:
+        results = _search_database(str(query))
+        candidates.extend(results)
+        if results:
             continue
-        candidates.extend(search_startups(sanitized, limit=_MAX_TOOLS_IN_CONTEXT))
+        for term in _search_terms(str(query)):
+            candidates.extend(_search_database(term))
     return _deduplicate_tools(candidates)[:_MAX_TOOLS_IN_CONTEXT]
 
 
@@ -348,10 +379,16 @@ def _select_response_tools(
     if not candidate_by_id:
         return []
 
-    ordered_ids = _ids_from_review(skeptic_text, "approved_ids")
-    if not ordered_ids:
-        ordered_ids = _ids_from_review(evaluation_text, "ranked_tools")
+    skeptic_review = _parse_json_object(skeptic_text)
+    if "approved_ids" in skeptic_review:
+        ordered_ids = _ids_from_review(skeptic_text, "approved_ids")
+        return [
+            candidate_by_id[tool_id]
+            for tool_id in ordered_ids
+            if tool_id in candidate_by_id
+        ][:5]
 
+    ordered_ids = _ids_from_review(evaluation_text, "ranked_tools")
     selected_tools = [
         candidate_by_id[tool_id]
         for tool_id in ordered_ids
@@ -426,16 +463,24 @@ def _run_agent_with_annotation(
         return result
 
 
-def _build_search_input(user_message: str, intent_text: str, queries: list[str]) -> str:
-    """Build SearchAgent input from the intent stage."""
+def _build_search_input(
+    user_message: str,
+    intent_text: str,
+    queries: list[str],
+    candidate_json: str,
+) -> str:
+    """Build SearchAgent input from deterministic database search results."""
     if not user_message.strip():
         raise ValueError("user_message must not be blank")
     if not queries:
         raise ValueError("queries must not be empty")
+    if not candidate_json.strip():
+        raise ValueError("candidate_json must not be blank")
     return (
         f"User request:\n{user_message}\n\n"
         f"IntentAgent output:\n{intent_text}\n\n"
-        f"Search queries to run:\n{json.dumps(queries, ensure_ascii=False)}"
+        f"Search queries used:\n{json.dumps(queries, ensure_ascii=False)}\n\n"
+        f"Candidate tools JSON:\n{candidate_json}"
     )
 
 
@@ -496,7 +541,6 @@ _search_agent = Agent(
     name="SearchAgent",
     instructions=_SEARCH_PROMPT,
     model=_COUNCIL_MODEL,
-    tools=[search_tools, count_tools],
 )
 
 _evaluator_agent = Agent(
@@ -541,20 +585,18 @@ def generate_recommendation_council_response(
         intent_text = _result_text(intent_result)
         queries = _queries_from_intent(intent_text, user_message)
 
-        search_result = _run_agent_with_annotation(
+        candidates = _manual_search_candidates(queries)
+        candidate_json = _candidate_payload(candidates)
+        _run_agent_with_annotation(
             _search_agent,
             "devtools-council-search",
             _SEARCH_PROMPT,
-            _build_search_input(user_message, intent_text, queries),
+            _build_search_input(user_message, intent_text, queries, candidate_json),
             "search",
             task_id,
             session_id,
             _COUNCIL_MAX_TURNS,
         )
-        candidates = _collect_tools(search_result)
-        if not candidates:
-            candidates = _manual_search_candidates(queries)
-        candidate_json = _candidate_payload(candidates)
 
         evaluation_result = _run_agent_with_annotation(
             _evaluator_agent,

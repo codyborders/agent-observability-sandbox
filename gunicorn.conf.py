@@ -2,11 +2,24 @@
 # Bind to localhost by default so nginx can front requests (and inject RUM) on the public ports.
 import os
 
+def _positive_int_env(var_name: str, default: int) -> int:
+    """Read a positive integer environment variable for Gunicorn settings."""
+    assert default > 0, "default must be positive"
+    raw_value = os.getenv(var_name)
+    if raw_value is None:
+        return default
+    try:
+        parsed_value = int(raw_value)
+    except ValueError:
+        return default
+    return max(1, parsed_value)
+
+
 bind = os.getenv("GUNICORN_BIND", "127.0.0.1:9000")
 workers = 2
 worker_class = "sync"
 worker_connections = 1000
-timeout = 30
+timeout = _positive_int_env("GUNICORN_TIMEOUT", 180)
 keepalive = 2
 max_requests = 1000
 max_requests_jitter = 100
