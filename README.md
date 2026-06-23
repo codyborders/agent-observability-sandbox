@@ -26,17 +26,41 @@ curl http://localhost:8000/health
 
 On first boot, the entrypoint restores `data/startups.db` from `seed/startups.db.gz` when the local database is missing or empty. Nonempty local databases are left alone.
 
+## Agents SDK workflow
+
+The chat widget runs a multi-agent Recommendation Council by default. It uses the OpenAI Agents SDK to run five role-specific agents against the local developer-tools database:
+
+- `IntentAgent` turns the user's request into match criteria plus database queries.
+- `SearchAgent` calls `search_tools` against the local SQLite data.
+- `EvaluatorAgent` ranks candidates against the user's criteria.
+- `SkepticAgent` removes weak or unsupported matches.
+- `WriterAgent` turns approved candidates into the final response.
+
+The workflow tags Datadog LLM spans with `workflow.name`, `agent.role`, `task.id`, and `model.name` where LLMObs span annotation is available. Set `CHATBOT_WORKFLOW=simple` to use the original single-agent assistant.
+
+The default model is `gpt-5-nano`, selected because it is newer than the previous `gpt-4o-mini` default and priced for low-cost agent routing plus compact classification and summary work. OpenAI's model docs list it for Agents SDK use, and this council workflow mainly needs tool calls plus short synthesis. Override `CHATBOT_MODEL` or `CHATBOT_COUNCIL_MODEL` in `.env` to compare cost and latency against response quality.
+
 ## Datadog versions and preview features
 
 The Python app pins `ddtrace==4.5.0rc1` in `requirements.txt`. The Dockerfile and local test command install that preview tracer from Datadog's build index at `https://dd-trace-py-builds.s3.amazonaws.com/96035140/index.html`.
 
-This tracer version is used for the Prompt Management preview path in `ai_classifier.py`. The classifier calls `LLMObs.get_prompt(..., label="production", fallback=...)` for these prompt IDs:
+This tracer version is used for Prompt Management preview paths in `ai_classifier.py` and `chatbot.py`. Both call `LLMObs.get_prompt(..., label="production", fallback=...)` and keep bundled prompt templates as a local fallback.
+
+Classifier prompt IDs:
 
 - `devtools-binary-classifier`
 - `devtools-batch-classifier`
 - `devtools-category-classifier`
 
-If Datadog Prompt Management is unavailable, missing, or fails during local testing, the app falls back to bundled prompt templates and continues running. When Prompt Management works, classifier calls are wrapped in `LLMObs.annotation_context(...)` so prompt metadata is attached to LLM Observability spans.
+Recommendation Council prompt IDs:
+
+- `devtools-council-intent`
+- `devtools-council-search`
+- `devtools-council-evaluator`
+- `devtools-council-skeptic`
+- `devtools-council-writer`
+
+When Prompt Management works, classifier and council calls are wrapped in `LLMObs.annotation_context(...)` so prompt metadata is attached to LLM Observability spans.
 
 The Compose stack uses Datadog Agent 7 through `gcr.io/datadoghq/agent:7`. Browser RUM is optional; when RUM credentials are set, the app loads Datadog Browser RUM `v6` unless `DATADOG_RUM_BROWSER_VERSION` overrides it.
 

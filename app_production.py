@@ -512,7 +512,8 @@ def api_chat():
 
     _chat_rate_limits[client_ip].append(now)
     session_id = (data.get("session_id") if data else None)
-    result = generate_chat_response(user_message, session_id=session_id)
+    workflow = (data.get("workflow") if data else None)
+    result = generate_chat_response(user_message, session_id=session_id, workflow=workflow)
     logger.info(
         "api.chat",
         extra={

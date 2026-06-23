@@ -161,6 +161,34 @@ def test_api_endpoints(app_module, monkeypatch):
     assert empty_payload["items"] == []
 
 
+def test_api_chat_forwards_workflow(app_module, monkeypatch):
+    """Chat API should pass workflow selection and RUM session ID to chatbot."""
+    module = app_module
+    captured = {}
+
+    def fake_generate_chat_response(message, session_id=None, workflow=None):
+        captured["message"] = message
+        captured["session_id"] = session_id
+        captured["workflow"] = workflow
+        return {"response": "ok", "tools": [], "workflow": workflow or "council"}
+
+    monkeypatch.setattr(module, "generate_chat_response", fake_generate_chat_response)
+    client = module.app.test_client()
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "monitoring tools", "session_id": "rum-1", "workflow": "simple"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["workflow"] == "simple"
+    assert captured == {
+        "message": "monitoring tools",
+        "session_id": "rum-1",
+        "workflow": "simple",
+    }
+
+
 def test_health_and_error_handlers(app_module, monkeypatch):
     module = app_module
     with module.app.app_context():
