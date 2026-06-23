@@ -1,0 +1,14 @@
+flask>=3.0.0,<4.0.0
+requests>=2.32.4,<3.0.0
+beautifulsoup4>=4.13.4,<5.0.0
+openai>=2.9.0,<3.0.0
+openai-agents>=0.7.0,<0.8.0
+python-dotenv>=1.1.1,<2.0.0
+lxml>=6.0.0,<7.0.0
+gunicorn>=21.0.0,<22.0.0
+ddtrace==4.5.0rc1
+python-json-logger>=2.0.7,<3.0.0
+cachetools>=5.3.3,<7.0.0
+tenacity>=9.0.0,<10.0.0
+pytest>=8.0.0,<9.0.0
+pytest-cov>=4.0.0,<6.0.0

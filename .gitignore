@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.sandbox.example
+*.db
+*.sqlite3
+__pycache__/
+*.py[cod]
+*.log*
+.venv/
+venv/
+.packages/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.DS_Store

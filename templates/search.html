@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Search DevTools - DevTools Scraper{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-4xl font-bold text-gray-900 mb-4">Search DevTools</h1>
+    <p class="text-gray-600 text-lg">Find specific developer tools and utilities</p>
+</div>
+
+<!-- Search Form -->
+<div class="mb-8">
+    <form method="GET" class="max-w-2xl">
+        <div class="relative">
+            <input
+                type="text"
+                name="q"
+                value="{{ query }}"
+                placeholder="Search by name, description, or category..."
+                class="w-full px-4 py-3 pl-12 pr-4 text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+            >
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+            <button type="submit" class="absolute inset-y-0 right-0 px-6 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 transition">
+                Search
+            </button>
+        </div>
+        <input type="hidden" name="per_page" value="{{ per_page }}">
+    </form>
+</div>
+
+<!-- Search Results -->
+{% if query %}
+<div class="mb-6">
+    <h2 class="text-2xl font-semibold text-gray-900 mb-2">
+        Search Results for "{{ query }}"
+    </h2>
+    <p class="text-gray-600">
+        {% if total_results %}
+            Showing {{ first_item }}&ndash;{{ last_item }} of {{ total_results }} result{% if total_results != 1 %}s{% endif %}
+        {% else %}
+            No results yet
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+
+<!-- Results Grid -->
+{% if startups %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for startup in startups %}
+    <div class="bg-white rounded-lg shadow-md card-hover overflow-hidden">
+        <div class="p-6">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-4">
+                <h3 class="text-xl font-semibold text-gray-900 line-clamp-2">
+                    <a href="/tool/{{ startup.id }}" class="hover:text-blue-600 transition">
+                        {{ startup.name }}
+                    </a>
+                </h3>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {% if startup.source == 'GitHub Trending' %}bg-green-100 text-green-800
+                    {% elif 'Hacker News' in startup.source %}bg-orange-100 text-orange-800
+                    {% elif startup.source == 'Product Hunt' %}bg-purple-100 text-purple-800
+                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ startup.source }}
+                </span>
+            </div>
+
+            <!-- Description -->
+            {% if startup.description %}
+            <p class="text-gray-600 mb-4 line-clamp-3">
+                {{ startup.description }}
+            </p>
+            {% endif %}
+
+            <!-- URL -->
+            {% if startup.url %}
+            <div class="mb-4">
+                <a href="{{ startup.url }}" target="_blank" rel="noopener noreferrer"
+                   class="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                    </svg>
+                    Visit Tool
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Footer -->
+            <div class="flex items-center justify-between text-sm text-gray-500">
+                <span>Found: {{ startup.date_found|format_date }}</span>
+                <span class="text-xs">ID: {{ startup.id }}</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% elif query %}
+<div class="text-center py-12">
+    <div class="text-gray-400 text-6xl mb-4">No results</div>
+    <h3 class="text-xl font-medium text-gray-900 mb-2">No results found</h3>
+    <p class="text-gray-600">Try a different search term or browse all tools.</p>
+    <a href="/" class="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+        Browse All Tools
+    </a>
+</div>
+{% else %}
+<div class="text-center py-12">
+    <div class="text-gray-400 text-6xl mb-4">Search</div>
+    <h3 class="text-xl font-medium text-gray-900 mb-2">Ready to search</h3>
+    <p class="text-gray-600">Enter a search term above to find devtools.</p>
+</div>
+{% endif %}
+
+{% if query and total_pages > 1 %}
+<div class="mt-8 flex items-center justify-center gap-4">
+    {% set prev_page = page - 1 %}
+    {% set next_page = page + 1 %}
+    {% if page > 1 %}
+        <a href="?q={{ query }}&page={{ prev_page }}&per_page={{ per_page }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">Previous</a>
+    {% else %}
+        <span class="px-4 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed">Previous</span>
+    {% endif %}
+    <span class="text-gray-600 text-sm">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+        <a href="?q={{ query }}&page={{ next_page }}&per_page={{ per_page }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">Next</a>
+    {% else %}
+        <span class="px-4 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed">Next</span>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

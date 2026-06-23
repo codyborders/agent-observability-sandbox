@@ -1,0 +1,83 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        DD_GIT_REPOSITORY_URL: ${DD_GIT_REPOSITORY_URL:-}
+        DD_GIT_COMMIT_SHA: ${DD_GIT_COMMIT_SHA:-}
+        DD_VERSION: ${DD_VERSION:-sandbox}
+    ports:
+      - "8000:9000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/var/log
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DEVTOOLS_DATA_DIR: /app/data
+      DEVTOOLS_DB_PATH: /app/data/startups.db
+      DD_ENV: ${DD_ENV:-sandbox}
+      DD_SERVICE: ${DD_SERVICE:-agent-observability-sandbox}
+      DD_VERSION: ${DD_VERSION:-sandbox}
+      DD_AGENT_HOST: dd-agent
+      DD_APM_ENABLED: "true"
+      DD_TRACE_ENABLED: "true"
+      DD_PROFILING_ENABLED: ${DD_PROFILING_ENABLED:-true}
+      DD_PROFILING_TIMELINE_ENABLED: ${DD_PROFILING_TIMELINE_ENABLED:-true}
+      DD_PROFILING_MEMORY_ENABLED: ${DD_PROFILING_MEMORY_ENABLED:-true}
+      DD_RUNTIME_METRICS_ENABLED: ${DD_RUNTIME_METRICS_ENABLED:-true}
+      DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: "true"
+      DD_DOGSTATSD_URL: udp://dd-agent:8125
+      DD_DYNAMIC_INSTRUMENTATION_ENABLED: ${DD_DYNAMIC_INSTRUMENTATION_ENABLED:-false}
+      DD_EXCEPTION_REPLAY_ENABLED: ${DD_EXCEPTION_REPLAY_ENABLED:-true}
+      DD_LIVE_DEBUGGING_ENABLED: ${DD_LIVE_DEBUGGING_ENABLED:-false}
+      DD_APPSEC_ENABLED: ${DD_APPSEC_ENABLED:-false}
+      DD_IAST_ENABLED: ${DD_IAST_ENABLED:-false}
+      DD_IAST_REQUEST_SAMPLING: ${DD_IAST_REQUEST_SAMPLING:-100}
+      DD_API_KEY: ${DATADOG_API_KEY:-}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_LLMOBS_ENABLED: ${DD_LLMOBS_ENABLED:-1}
+      DD_LLMOBS_ML_APP: ${DD_LLMOBS_ML_APP:-agent-observability-sandbox}
+      DD_CODE_ORIGIN_FOR_SPANS_ENABLED: ${DD_CODE_ORIGIN_FOR_SPANS_ENABLED:-true}
+      GUNICORN_BIND: 0.0.0.0:9000
+      SCRAPER_CRON_ENABLED: ${SCRAPER_CRON_ENABLED:-false}
+      SANDBOX_RESTORE_SEED: ${SANDBOX_RESTORE_SEED:-true}
+    depends_on:
+      - dd-agent
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  dd-agent:
+    image: gcr.io/datadoghq/agent:7
+    hostname: agent-observability-sandbox-agent
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DD_API_KEY: ${DATADOG_API_KEY:-}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_HOSTNAME: ${DD_HOSTNAME:-agent-observability-sandbox-agent}
+      DD_ENV: ${DD_ENV:-sandbox}
+      DD_SERVICE: ${DD_SERVICE:-agent-observability-sandbox}
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_LOGS_ENABLED: ${DD_LOGS_ENABLED:-true}
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: ${DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL:-true}
+      DD_PROCESS_AGENT_ENABLED: ${DD_PROCESS_AGENT_ENABLED:-false}
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_CONTAINER_EXCLUDE: name:dd-agent
+    ports:
+      - "8126:8126"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /opt/datadog-agent/run:/opt/datadog-agent/run:rw
+    restart: unless-stopped

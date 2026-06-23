@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{% if source_display %}{{ source_display }} - {% endif %}All DevTools - DevTools Scraper{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex items-start justify-between mb-4">
+        <div>
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">
+                {% if source_display and source_display != 'All Sources' %}
+                    {{ source_display }} Tools
+                {% else %}
+                    All DevTools
+                {% endif %}
+            </h1>
+            <p class="text-gray-600 text-lg">
+                {% if source_display and source_display != 'All Sources' %}
+                    Showing {{ first_item }}&ndash;{{ last_item }} of {{ total_results }} tools from {{ source_display }}
+                {% else %}
+                    Showing {{ first_item }}&ndash;{{ last_item }} of {{ total_results }} tools
+                {% endif %}
+            </p>
+        </div>
+        {% if last_scrape_time %}
+        <div class="text-right">
+            <p class="text-sm text-gray-500">
+                Last Updated<br>
+                <span class="font-medium text-gray-700">{{ last_scrape_time|format_datetime }}</span>
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Stats -->
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <a href="/" class="block">
+            <div class="bg-white p-4 rounded-lg shadow transition-all duration-200 hover:shadow-lg
+                {% if not current_filter %}ring-2 ring-blue-500{% endif %} cursor-pointer">
+                <div class="text-2xl font-bold text-blue-600">{{ source_counts.total }}</div>
+                <div class="text-gray-600">Total Tools</div>
+            </div>
+        </a>
+        <a href="/source/github" class="block">
+            <div class="bg-white p-4 rounded-lg shadow transition-all duration-200 hover:shadow-lg
+                {% if current_filter == 'github' %}ring-2 ring-green-500{% endif %} cursor-pointer">
+                <div class="text-2xl font-bold text-green-600">{{ source_counts.github }}</div>
+                <div class="text-gray-600">From GitHub</div>
+            </div>
+        </a>
+        <a href="/source/hackernews" class="block">
+            <div class="bg-white p-4 rounded-lg shadow transition-all duration-200 hover:shadow-lg
+                {% if current_filter == 'hackernews' %}ring-2 ring-orange-500{% endif %} cursor-pointer">
+                <div class="text-2xl font-bold text-orange-600">{{ source_counts.hackernews }}</div>
+                <div class="text-gray-600">From HN</div>
+            </div>
+        </a>
+        <a href="/source/producthunt" class="block">
+            <div class="bg-white p-4 rounded-lg shadow transition-all duration-200 hover:shadow-lg
+                {% if current_filter == 'producthunt' %}ring-2 ring-purple-500{% endif %} cursor-pointer">
+                <div class="text-2xl font-bold text-purple-600">{{ source_counts.producthunt }}</div>
+                <div class="text-gray-600">From Product Hunt</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Search Bar -->
+<div class="mb-8">
+    <form action="/search" method="GET" class="max-w-md">
+        <div class="relative">
+            <input
+                type="text"
+                name="q"
+                placeholder="Search devtools..."
+                class="w-full px-4 py-2 pl-10 pr-4 text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- DevTools Grid -->
+{% if startups %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for startup in startups %}
+    <div class="bg-white rounded-lg shadow-md card-hover overflow-hidden">
+        <div class="p-6">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-4">
+                <h3 class="text-xl font-semibold text-gray-900 line-clamp-2">
+                    <a href="/tool/{{ startup.id }}" class="hover:text-blue-600 transition">
+                        {{ startup.name }}
+                    </a>
+                </h3>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {% if startup.source == 'GitHub Trending' %}bg-green-100 text-green-800
+                    {% elif 'Hacker News' in startup.source %}bg-orange-100 text-orange-800
+                    {% elif startup.source == 'Product Hunt' %}bg-purple-100 text-purple-800
+                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ startup.source }}
+                </span>
+            </div>
+
+            <!-- Description -->
+            {% if startup.description %}
+            <p class="text-gray-600 mb-4 line-clamp-3">
+                {{ startup.description }}
+            </p>
+            {% endif %}
+
+            <!-- URL -->
+            {% if startup.url %}
+            <div class="mb-4">
+                <a href="{{ startup.url }}" target="_blank" rel="noopener noreferrer"
+                   class="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                    </svg>
+                    Visit Tool
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Footer -->
+            <div class="flex items-center justify-between text-sm text-gray-500">
+                <span>Found: {{ startup.date_found|format_date }}</span>
+                <span class="text-xs">ID: {{ startup.id }}</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12">
+    <div class="text-gray-400 text-6xl mb-4">No results</div>
+    <h3 class="text-xl font-medium text-gray-900 mb-2">
+        {% if current_filter %}
+            No tools found from this source
+        {% else %}
+            No devtools found
+        {% endif %}
+    </h3>
+    <p class="text-gray-600">
+        {% if current_filter %}
+            Try running the scraper for this source or browse all tools.
+        {% else %}
+            Try running the scraper first to collect some data.
+        {% endif %}
+    </p>
+    {% if current_filter %}
+    <a href="/" class="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+        View All Tools
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if total_pages > 1 %}
+<div class="mt-10 flex items-center justify-center gap-4">
+    {% set prev_page = page - 1 %}
+    {% set next_page = page + 1 %}
+    {% set base_path = '/' if not current_filter else '/source/' ~ current_filter %}
+    {% if page > 1 %}
+        <a href="{{ base_path }}?page={{ prev_page }}&per_page={{ per_page }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">Previous</a>
+    {% else %}
+        <span class="px-4 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed">Previous</span>
+    {% endif %}
+    <span class="text-gray-600 text-sm">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+        <a href="{{ base_path }}?page={{ next_page }}&per_page={{ per_page }}" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">Next</a>
+    {% else %}
+        <span class="px-4 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed">Next</span>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
