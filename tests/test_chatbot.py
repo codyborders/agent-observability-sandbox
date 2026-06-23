@@ -1,5 +1,7 @@
 """Tests for chatbot query sanitization."""
 
+from types import SimpleNamespace
+
 import pytest
 from agents.items import ToolCallOutputItem
 
@@ -66,7 +68,7 @@ def test_collect_tools_deduplicates_tool_call_output() -> None:
         raw_item={"type": "function_call_output", "call_id": "2", "output": ""},
         output='[{"id": 2, "name": "LogLens"}]',
     )
-    result = type("Result", (), {"new_items": [first_item, second_item]})()
+    result = SimpleNamespace(new_items=[first_item, second_item])
 
     tools = _collect_tools(result)
 

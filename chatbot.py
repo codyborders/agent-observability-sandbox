@@ -43,6 +43,7 @@ _COUNCIL_MAX_TURNS = _positive_int_env("CHATBOT_COUNCIL_MAX_TURNS", 5)
 _MAX_TOOLS_IN_CONTEXT = _positive_int_env("CHATBOT_MAX_TOOLS", 10)
 _WORKFLOW_NAME = "recommendation_council"
 _COUNCIL_ROLES = {"intent", "search", "evaluator", "skeptic", "writer"}
+_COUNCIL_AGENT_NAMES = sorted(_COUNCIL_ROLES)
 
 # FTS5 operator pattern to sanitize user-supplied queries
 _FTS5_OPERATORS = re.compile(r'["\*\(\)\+\-\^:/\{\}]')
@@ -321,7 +322,11 @@ def _ids_from_review(text: str, key: str) -> list[str]:
     parsed = _parse_json_object(text)
     raw_ids = parsed.get(key, [])
     if key == "ranked_tools" and isinstance(raw_ids, list):
-        return [str(item.get("id")) for item in raw_ids if isinstance(item, dict) and item.get("id")]
+        return [
+            str(item.get("id"))
+            for item in raw_ids
+            if isinstance(item, dict) and item.get("id")
+        ]
     if not isinstance(raw_ids, list):
         return []
     return [str(item) for item in raw_ids if item is not None]
@@ -335,7 +340,11 @@ def _select_response_tools(
     """Select the tool cards that should accompany the council answer."""
     if not isinstance(candidates, list):
         raise TypeError("candidates must be a list")
-    candidate_by_id = {str(tool.get("id")): tool for tool in candidates if tool.get("id") is not None}
+    candidate_by_id = {
+        str(tool.get("id")): tool
+        for tool in candidates
+        if tool.get("id") is not None
+    }
     if not candidate_by_id:
         return []
 
@@ -343,7 +352,11 @@ def _select_response_tools(
     if not ordered_ids:
         ordered_ids = _ids_from_review(evaluation_text, "ranked_tools")
 
-    selected_tools = [candidate_by_id[tool_id] for tool_id in ordered_ids if tool_id in candidate_by_id]
+    selected_tools = [
+        candidate_by_id[tool_id]
+        for tool_id in ordered_ids
+        if tool_id in candidate_by_id
+    ]
     if selected_tools:
         return selected_tools[:5]
     return candidates[:5]
@@ -600,7 +613,7 @@ def generate_recommendation_council_response(
             "response": response_text,
             "tools": selected_tools,
             "workflow": _WORKFLOW_NAME,
-            "agents": sorted(_COUNCIL_ROLES),
+            "agents": _COUNCIL_AGENT_NAMES,
             "model": _COUNCIL_MODEL,
             "task_id": task_id,
         }
@@ -617,7 +630,7 @@ def generate_recommendation_council_response(
             ),
             "tools": [],
             "workflow": _WORKFLOW_NAME,
-            "agents": sorted(_COUNCIL_ROLES),
+            "agents": _COUNCIL_AGENT_NAMES,
             "model": _COUNCIL_MODEL,
             "task_id": task_id,
         }
@@ -632,7 +645,9 @@ def _generate_single_agent_response(
         raise ValueError("user_message must not be blank")
 
     try:
-        with LLMObs.annotation_context(prompt=_get_prompt_annotation("devtools-assistant", _SYSTEM_PROMPT)):
+        with LLMObs.annotation_context(
+            prompt=_get_prompt_annotation("devtools-assistant", _SYSTEM_PROMPT)
+        ):
             result = Runner.run_sync(
                 _agent,
                 input=user_message,
