@@ -4,14 +4,6 @@ Agent Observability Sandbox is a local teaching repo for the DevTools Scrape app
 
 Your clone reports to your Datadog account. Put credentials in `.env`, change the service and environment tags as needed, and reset the local database whenever an experiment gets messy.
 
-## Rules
-
-Keep secrets out of Git. Keep API keys in `.env`.
-
-Do not use emoji in documentation, code comments, scripts, log messages, examples, commit messages, or generated project output. The test suite enforces this rule.
-
-Keep this sandbox independent from the production app and deployment workflow.
-
 ## Requirements
 
 Install Podman Desktop with Compose support. You also need an OpenAI API key for chatbot and classifier calls, plus a Datadog API key from your own account. Set `DD_SITE` to your Datadog region, such as `datadoghq.com`, `datadoghq.eu`, `us3.datadoghq.com`, `us5.datadoghq.com`, or `ap1.datadoghq.com`.
