@@ -14,14 +14,14 @@ Keep this sandbox independent from the production app and deployment workflow.
 
 ## Requirements
 
-Install Docker with Docker Compose v2. You also need an OpenAI API key for chatbot and classifier calls, plus a Datadog API key from your own account. Set `DD_SITE` to your Datadog region, such as `datadoghq.com`, `datadoghq.eu`, `us3.datadoghq.com`, `us5.datadoghq.com`, or `ap1.datadoghq.com`.
+Install Podman Desktop with Compose support. You also need an OpenAI API key for chatbot and classifier calls, plus a Datadog API key from your own account. Set `DD_SITE` to your Datadog region, such as `datadoghq.com`, `datadoghq.eu`, `us3.datadoghq.com`, `us5.datadoghq.com`, or `ap1.datadoghq.com`.
 
 ## Quick start
 
 ```bash
 cp .env.sandbox.example .env
 # Edit .env and add your OpenAI key, Datadog API key, and Datadog site.
-docker compose up --build
+podman compose up --build
 ```
 
 Open `http://localhost:8000`.
@@ -45,15 +45,15 @@ The stack can emit Flask request traces, container logs, runtime metrics, profil
 Scheduled scrapes are disabled by default to avoid surprise API usage and data changes. To run one scrape with tracing:
 
 ```bash
-docker compose exec app ddtrace-run python scrape_all.py
+podman compose exec app ddtrace-run python scrape_all.py
 ```
 
 ## Reset the database
 
 ```bash
-docker compose down
+podman compose down
 python scripts/restore_sandbox_db.py --force
-docker compose up --build
+podman compose up --build
 ```
 
 ## Tests
