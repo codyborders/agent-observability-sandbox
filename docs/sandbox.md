@@ -63,11 +63,24 @@ Change these tags when you want to separate experiments. For example, set `DD_SE
 
 ## Datadog features enabled by default
 
-After `docker compose up --build`, the app runs with Datadog Agent 7 and Python `ddtrace` enabled. The default compose settings send Flask request traces, app container logs, Python runtime metrics, profiler data, DogStatsD traffic, exception replay data, code-origin metadata for spans, and LLM Observability spans for chatbot or classifier calls.
+After `docker compose up --build`, the app runs with Datadog Agent 7 and Python `ddtrace` enabled. These features are on by default:
 
-Agent Observability is enabled through `DD_LLMOBS_ENABLED=1`. The chat widget uses the OpenAI Agents SDK Recommendation Council by default, so a browser chat should create an Agent Observability graph with handoff spans and a `search_tools` tool call. Prompt Management and prompt metadata paths are available when the configured Datadog account can return managed prompts; local fallback prompts keep the app running when it cannot.
+| Feature | Default setting | What to expect |
+| --- | --- | --- |
+| APM tracing | `DD_APM_ENABLED=true`, `DD_TRACE_ENABLED=true` | Flask request traces for page loads and API calls. |
+| Container logs | `DD_LOGS_ENABLED=true`, `DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true` | App container logs collected by the Datadog Agent. |
+| Runtime metrics | `DD_RUNTIME_METRICS_ENABLED=true` | Python runtime metrics attached to the configured service and environment. |
+| Profiling | `DD_PROFILING_ENABLED=true` | CPU, timeline, and memory profiling data from the app process. |
+| DogStatsD | `DD_DOGSTATSD_URL=udp://dd-agent:8125` | Custom metric traffic can flow from the app container to the Agent. |
+| Exception Replay | `DD_EXCEPTION_REPLAY_ENABLED=true` | Captured exception context for supported traced errors. |
+| Code origin metadata | `DD_CODE_ORIGIN_FOR_SPANS_ENABLED=true` | Span metadata can point back to source locations. |
+| LLM Observability | `DD_LLMOBS_ENABLED=1` | Chatbot and classifier OpenAI calls create LLM spans under `DD_LLMOBS_ML_APP`. |
+| Agent Observability graph | `CHATBOT_WORKFLOW=council` | Browser chat runs the OpenAI Agents SDK Recommendation Council with handoff spans and a `search_tools` tool call. |
+| Prompt Management fallback path | Built into `ai_classifier.py` and `chatbot.py` | Managed prompts are used when Datadog returns them; local fallback prompts keep the app running otherwise. |
 
-RUM is configured but inactive until `DATADOG_RUM_APPLICATION_ID` and `DATADOG_RUM_CLIENT_TOKEN` are set. Dynamic Instrumentation, Live Debugging, AppSec, IAST, and the Process Agent are disabled by default so the sandbox starts with low-risk telemetry.
+RUM is configured but inactive until `DATADOG_RUM_APPLICATION_ID` and `DATADOG_RUM_CLIENT_TOKEN` are set.
+
+These Datadog features are disabled by default for a lower-risk sandbox start: Dynamic Instrumentation, Live Debugging, AppSec, IAST, and the Process Agent.
 
 Run a chat request from the browser to create an LLM span. You can also call the API directly:
 
