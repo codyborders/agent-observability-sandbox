@@ -93,25 +93,6 @@ def stub_external_sdks():
             return _FakeAnnotationContext(**kwargs)
 
         @classmethod
-        def workflow(cls, **kwargs):
-            """Return a no-op workflow span context manager."""
-            return _FakeAnnotationContext(**kwargs)
-
-        @classmethod
-        def agent(cls, **kwargs):
-            """Return a no-op agent span context manager."""
-            return _FakeAnnotationContext(**kwargs)
-
-        @classmethod
-        def retrieval(cls, **kwargs):
-            """Return a no-op retrieval span context manager."""
-            return _FakeAnnotationContext(**kwargs)
-
-        @classmethod
-        def annotate(cls, **kwargs):
-            cls.calls.append(((), kwargs))
-
-        @classmethod
         def get_prompt(cls, prompt_id, label=None, fallback=None):
             return _FakeManagedPrompt(prompt_id, fallback, label=label)
 
@@ -200,30 +181,63 @@ def stub_external_sdks():
     # chatbot.generate_chat_response directly.
     agents_module = types.ModuleType("agents")
 
-    def _noop_decorator(fn=None, **kwargs):
-        """Stand-in for @function_tool -- returns the function unchanged."""
-        if fn is not None:
-            return fn
-        return lambda f: f
+    class _FakeFunctionTool:
+        def __init__(self, func):
+            self.func = func
+            self.name = getattr(func, "__name__", "function_tool")
+
+    class _FakeHandoff:
+        def __init__(self, agent, tool_name: str):
+            self.agent_name = getattr(agent, "name", "Agent")
+            self.tool_name = tool_name
+
+    class _FakeModelSettings:
+        def __init__(self, **kwargs):
+            self.tool_choice = kwargs.get("tool_choice")
 
     class _FakeAgent:
         def __init__(self, *args, **kwargs):
-            pass
+            self.name = kwargs.get("name", args[0] if args else "Agent")
+            self.instructions = kwargs.get("instructions")
+            self.handoff_description = kwargs.get("handoff_description")
+            self.tools = kwargs.get("tools", [])
+            self.handoffs = kwargs.get("handoffs", [])
+            self.model = kwargs.get("model")
+            self.model_settings = kwargs.get("model_settings")
 
     class _FakeRunner:
         @staticmethod
         def run_sync(*args, **kwargs):
             return types.SimpleNamespace(final_output="stub", new_items=[])
 
+    def _fake_function_tool(fn=None, **kwargs):
+        """Stand-in for @function_tool -- returns a minimal function tool."""
+        if fn is not None:
+            return _FakeFunctionTool(fn)
+        return lambda f: _FakeFunctionTool(f)
+
+    def _fake_handoff(agent, tool_name_override=None, **kwargs):
+        tool_name = tool_name_override or f"transfer_to_{getattr(agent, 'name', 'agent').lower()}"
+        return _FakeHandoff(agent, tool_name)
+
     agents_module.Agent = _FakeAgent
+    agents_module.ModelSettings = _FakeModelSettings
     agents_module.Runner = _FakeRunner
-    agents_module.function_tool = _noop_decorator
+    agents_module.function_tool = _fake_function_tool
+    agents_module.handoff = _fake_handoff
+
+    agents_extensions_module = types.ModuleType("agents.extensions")
+    handoff_prompt_module = types.ModuleType("agents.extensions.handoff_prompt")
+    handoff_prompt_module.prompt_with_handoff_instructions = lambda prompt: prompt
+    agents_extensions_module.handoff_prompt = handoff_prompt_module
 
     agents_items_module = types.ModuleType("agents.items")
     agents_items_module.ToolCallOutputItem = type("ToolCallOutputItem", (), {})
     agents_module.items = agents_items_module
 
     sys.modules["agents"] = agents_module
+    sys.modules["agents.extensions"] = agents_extensions_module
+    sys.modules["agents.extensions.handoff_prompt"] = handoff_prompt_module
     sys.modules["agents.items"] = agents_items_module
 
     yield
@@ -234,6 +248,8 @@ def stub_external_sdks():
     sys.modules.pop("ddtrace.tracer", None)
     sys.modules.pop("openai", None)
     sys.modules.pop("agents", None)
+    sys.modules.pop("agents.extensions", None)
+    sys.modules.pop("agents.extensions.handoff_prompt", None)
     sys.modules.pop("agents.items", None)
 
 

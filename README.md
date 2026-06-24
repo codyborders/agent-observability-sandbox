@@ -36,7 +36,7 @@ The chat widget runs a multi-agent Recommendation Council by default. It uses th
 - `SkepticAgent` removes weak or unsupported matches.
 - `WriterAgent` turns approved candidates into the final response.
 
-The workflow creates a Datadog Agent Observability workflow span with nested agent spans for each council role and a retrieval span for the local database search. Spans are tagged with `workflow.name`, `agent.role`, `task.id`, and `model.name` so the Datadog trace graph can show the council flow. Set `CHATBOT_WORKFLOW=simple` to use the original single-agent assistant.
+The workflow uses OpenAI Agents SDK-native handoffs from `IntentAgent` through `WriterAgent`. `SearchAgent` calls `search_tools` as an SDK function tool. Datadog's `openai_agents` auto-instrumentation reads those SDK events and builds the Agent Observability graph from the single run. Set `CHATBOT_WORKFLOW=simple` to use the original single-agent assistant.
 
 The default model is `gpt-5-nano`, selected because it is newer than the previous `gpt-4o-mini` default and priced for low-cost agent routing plus compact classification and summary work. OpenAI's model docs list it for Agents SDK use, and this council workflow mainly needs tool calls plus short synthesis. Override `CHATBOT_MODEL` or `CHATBOT_COUNCIL_MODEL` in `.env` to compare cost and latency against response quality.
 
@@ -60,7 +60,7 @@ Recommendation Council prompt IDs:
 - `devtools-council-skeptic`
 - `devtools-council-writer`
 
-When Prompt Management works, classifier and council calls are wrapped in `LLMObs.annotation_context(...)` so prompt metadata is attached to LLM Observability spans.
+When Prompt Management works, classifier calls and the optional single-agent chat path are wrapped in `LLMObs.annotation_context(...)` so prompt metadata is attached to LLM Observability spans. The council path relies on OpenAI Agents SDK auto-instrumentation for graph spans.
 
 The Compose stack uses Datadog Agent 7 through `gcr.io/datadoghq/agent:7`. Browser RUM is optional; when RUM credentials are set, the app loads Datadog Browser RUM `v6` unless `DATADOG_RUM_BROWSER_VERSION` overrides it.
 
