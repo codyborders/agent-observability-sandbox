@@ -1,6 +1,7 @@
 """Tests for chatbot query sanitization."""
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from agents.items import ToolCallOutputItem
@@ -17,6 +18,12 @@ from chatbot import (
     generate_chat_response,
     generate_recommendation_council_response,
 )
+
+
+def _handoff_identity(agent: Any) -> tuple[str, str]:
+    """Return the target agent name and tool name for a single handoff."""
+    handoff_item = agent.handoffs[0]
+    return handoff_item.agent_name, handoff_item.tool_name
 
 
 @pytest.mark.parametrize(
@@ -72,22 +79,22 @@ def test_recommendation_council_uses_native_handoff_graph() -> None:
     """Council should expose one OpenAI Agents SDK handoff chain for Datadog."""
     search_tool_names = [tool.name for tool in _search_agent.tools]
 
-    assert [_intent_agent.handoffs[0].agent_name, _intent_agent.handoffs[0].tool_name] == [
+    assert _handoff_identity(_intent_agent) == (
         "SearchAgent",
         "transfer_to_search_agent",
-    ]
-    assert [_search_agent.handoffs[0].agent_name, _search_agent.handoffs[0].tool_name] == [
+    )
+    assert _handoff_identity(_search_agent) == (
         "EvaluatorAgent",
         "transfer_to_evaluator_agent",
-    ]
-    assert [_evaluator_agent.handoffs[0].agent_name, _evaluator_agent.handoffs[0].tool_name] == [
+    )
+    assert _handoff_identity(_evaluator_agent) == (
         "SkepticAgent",
         "transfer_to_skeptic_agent",
-    ]
-    assert [_skeptic_agent.handoffs[0].agent_name, _skeptic_agent.handoffs[0].tool_name] == [
+    )
+    assert _handoff_identity(_skeptic_agent) == (
         "WriterAgent",
         "transfer_to_writer_agent",
-    ]
+    )
     assert _writer_agent.handoffs == []
     assert _intent_agent.model_settings.tool_choice == "transfer_to_search_agent"
     assert _search_agent.model_settings.tool_choice == "search_tools"

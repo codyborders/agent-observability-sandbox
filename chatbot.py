@@ -245,6 +245,19 @@ def _normalize_workflow(workflow: str | None) -> str:
     return "council"
 
 
+def _required_handoff(target_agent: Agent, tool_name: str, description: str) -> Any:
+    """Create a required SDK handoff tool with a stable Datadog-visible name."""
+    if not tool_name.strip():
+        raise ValueError("tool_name must not be blank")
+    if not description.strip():
+        raise ValueError("description must not be blank")
+    return handoff(
+        target_agent,
+        tool_name_override=tool_name,
+        tool_description_override=description,
+    )
+
+
 _agent = Agent(
     name="DevToolsAssistant",
     instructions=_SYSTEM_PROMPT,
@@ -264,10 +277,10 @@ _skeptic_agent = Agent(
     handoff_description="Checks candidates for weak evidence before final writing.",
     instructions=prompt_with_handoff_instructions(_SKEPTIC_PROMPT),
     handoffs=[
-        handoff(
+        _required_handoff(
             _writer_agent,
-            tool_name_override="transfer_to_writer_agent",
-            tool_description_override="Required next step after checking candidate evidence.",
+            "transfer_to_writer_agent",
+            "Required next step after checking candidate evidence.",
         )
     ],
     model=_COUNCIL_MODEL,
@@ -279,10 +292,10 @@ _evaluator_agent = Agent(
     handoff_description="Ranks searched tools against the user's stated goal.",
     instructions=prompt_with_handoff_instructions(_EVALUATOR_PROMPT),
     handoffs=[
-        handoff(
+        _required_handoff(
             _skeptic_agent,
-            tool_name_override="transfer_to_skeptic_agent",
-            tool_description_override="Required next step after ranking searched candidates.",
+            "transfer_to_skeptic_agent",
+            "Required next step after ranking searched candidates.",
         )
     ],
     model=_COUNCIL_MODEL,
@@ -295,10 +308,10 @@ _search_agent = Agent(
     instructions=prompt_with_handoff_instructions(_SEARCH_PROMPT),
     tools=[search_tools],
     handoffs=[
-        handoff(
+        _required_handoff(
             _evaluator_agent,
-            tool_name_override="transfer_to_evaluator_agent",
-            tool_description_override="Required next step after search_tools returns candidate tools.",
+            "transfer_to_evaluator_agent",
+            "Required next step after search_tools returns candidate tools.",
         )
     ],
     model=_COUNCIL_MODEL,
@@ -309,10 +322,10 @@ _intent_agent = Agent(
     name="IntentAgent",
     instructions=prompt_with_handoff_instructions(_INTENT_PROMPT),
     handoffs=[
-        handoff(
+        _required_handoff(
             _search_agent,
-            tool_name_override="transfer_to_search_agent",
-            tool_description_override="Required next step for every developer-tool recommendation request.",
+            "transfer_to_search_agent",
+            "Required next step for every developer-tool recommendation request.",
         )
     ],
     model=_COUNCIL_MODEL,
