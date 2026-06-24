@@ -1,10 +1,10 @@
 # Agent Observability Sandbox
 
-Agent Observability Sandbox is a local teaching repo for the DevTools Scrape app and Datadog telemetry. Use it to change features, trigger LLM calls, inspect traces, compare logs, and test optional RUM without connecting to the production deployment.
+DevTools Scrape is a Flask app that collects developer-tool listings from Hacker News, GitHub Trending, and Product Hunt into a local SQLite database. It uses OpenAI classification to identify developer-focused products and assign categories for browsing.
+
+The sandbox adds an AI chat layer over that corpus. The default chat workflow uses the OpenAI Agents SDK as a five-agent Recommendation Council: one agent interprets the request, one searches SQLite, two review candidate fit, and one writes the answer. Datadog Agent Observability traces the handoffs, tool calls, model requests, logs, profiling data, and optional browser RUM.
 
 Start with the [Sandbox Guide](docs/sandbox.md) for setup details, default Datadog features, and troubleshooting.
-
-Your clone reports to your Datadog account. Put credentials in `.env`, change the service and environment tags as needed, and reset the local database whenever an experiment gets messy.
 
 ## Requirements
 

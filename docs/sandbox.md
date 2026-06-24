@@ -1,7 +1,5 @@
 # Sandbox Guide
 
-This repository is a self-contained sandbox for DevTools Scrape. Use it to explore the app, change features, and learn Datadog telemetry without touching the production repository.
-
 ## Setup
 
 Copy the environment template and fill in personal credentials:
