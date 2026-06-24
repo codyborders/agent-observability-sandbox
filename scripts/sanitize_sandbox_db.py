@@ -4,17 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from create_sandbox_seed import validate_database
+from create_sandbox_seed import EMAIL_PATTERN, SECRET_TOKEN_PATTERN, validate_database
 
-EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-SECRET_TOKEN_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
 SENSITIVE_ENV_MARKERS = (
     "OPENAI_API_KEY",
     "DATADOG_API_KEY",
