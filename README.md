@@ -1,8 +1,8 @@
 # Agent Observability Sandbox
 
-DevTools Scrape is a Flask app that collects developer-tool listings from Hacker News, GitHub Trending, and Product Hunt into a local SQLite database. It uses OpenAI classification to identify developer-focused products and assign categories for browsing.
+Devtoolscrape is a Flask app that collects developer-tool listings from Hackernews, Github Trending, and Product Hunt into a local SQLite database. It uses OpenAI classification to identify developer-focused products and assign categories for browsing.
 
-The sandbox adds an AI chat layer over that corpus. The default chat workflow uses the OpenAI Agents SDK as a five-agent Recommendation Council: one agent interprets the request, one searches SQLite, two review candidate fit, and one writes the answer. Datadog Agent Observability traces the handoffs, tool calls, model requests, logs, profiling data, and optional browser RUM.
+The sandbox includes an AI chatbot for searching that database. The default chat workflow uses the OpenAI Agents SDK as a five-agent Recommendation Council: one agent interprets the request, one searches SQLite, two review candidate fit, and one writes the answer. Datadog Agent Observability traces the handoffs, tool calls, model requests, logs, profiling data, and optional browser RUM.
 
 Start with the [Sandbox Guide](docs/sandbox.md) for setup details, default Datadog features, and troubleshooting.
 

@@ -2,7 +2,7 @@
 
 This directory stores buildable ideas for extending the Agent Observability Sandbox. No code lives here.
 
-Each note focuses on one Datadog Agent Observability feature. The examples assume the current app has a Flask chat widget, a local SQLite developer-tools corpus, OpenAI Agents SDK handoffs, and `search_tools` database lookups.
+Each note focuses on one Datadog Agent Observability feature. The examples assume the current app has a Flask chat widget, a local SQLite developer-tools database, OpenAI Agents SDK handoffs, and `search_tools` database lookups.
 
 Current notes cover evaluations in `EVALS.md`, experiments in `experiments.md`, datasets in `datasets.md`, prompt management in `prompt_management.md`, prompt tracking in `prompt_tracking.md`, and prompt optimization in `prompt_optimization.md`.
 

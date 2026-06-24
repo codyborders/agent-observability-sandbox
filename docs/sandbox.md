@@ -24,7 +24,7 @@ Open `http://localhost:8000` and check `http://localhost:8000/health`.
 
 ## Database seed
 
-The sandbox ships with `seed/startups.db.gz`, a sanitized copy of the full DevTools Scrape corpus. On first boot, the entrypoint restores it to `data/startups.db` when the target file is absent or empty.
+The sandbox ships with `seed/startups.db.gz`, a sanitized copy of the full Devtoolscrape database. On first boot, the entrypoint restores it to `data/startups.db` when the target file is absent or empty.
 
 Existing nonempty databases are preserved. This lets you experiment with data changes and restart containers without losing work.
 
