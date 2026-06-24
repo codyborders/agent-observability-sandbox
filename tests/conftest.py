@@ -93,6 +93,25 @@ def stub_external_sdks():
             return _FakeAnnotationContext(**kwargs)
 
         @classmethod
+        def workflow(cls, **kwargs):
+            """Return a no-op workflow span context manager."""
+            return _FakeAnnotationContext(**kwargs)
+
+        @classmethod
+        def agent(cls, **kwargs):
+            """Return a no-op agent span context manager."""
+            return _FakeAnnotationContext(**kwargs)
+
+        @classmethod
+        def retrieval(cls, **kwargs):
+            """Return a no-op retrieval span context manager."""
+            return _FakeAnnotationContext(**kwargs)
+
+        @classmethod
+        def annotate(cls, **kwargs):
+            cls.calls.append(((), kwargs))
+
+        @classmethod
         def get_prompt(cls, prompt_id, label=None, fallback=None):
             return _FakeManagedPrompt(prompt_id, fallback, label=label)
 

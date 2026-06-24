@@ -10,6 +10,7 @@ from chatbot import (
     _manual_search_candidates,
     _normalize_workflow,
     _queries_from_intent,
+    _run_agent_with_annotation,
     _sanitize_fts_query,
     _search_agent,
     _select_response_tools,
@@ -129,10 +130,81 @@ def test_select_response_tools_respects_empty_skeptic_approval() -> None:
     assert selected == []
 
 
+def test_run_agent_with_annotation_creates_agent_span(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each council agent run should be wrapped in an Agent Observability span."""
+    spans: list[tuple[str, str, str | None]] = []
+    annotations: list[dict[str, object]] = []
+
+    class RecordingSpan:
+        def __init__(self, kind: str, name: str, session_id: str | None = None):
+            self.kind = kind
+            self.name = name
+            self.session_id = session_id
+
+        def __enter__(self):
+            spans.append((self.kind, self.name, self.session_id))
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+    class RecordingPrompt:
+        def to_annotation_dict(self):
+            return {"id": "devtools-council-intent", "version": "test"}
+
+    class RecordingLLMObs:
+        @classmethod
+        def agent(cls, name: str, session_id: str | None = None):
+            return RecordingSpan("agent", name, session_id)
+
+        @classmethod
+        def annotation_context(cls, **kwargs):
+            return RecordingSpan("annotation_context", "prompt")
+
+        @classmethod
+        def annotate(cls, **kwargs):
+            annotations.append(kwargs)
+
+        @classmethod
+        def get_prompt(cls, prompt_id: str, label: str | None = None, fallback: str | None = None):
+            assert prompt_id == "devtools-council-intent"
+            assert label == "production"
+            assert fallback
+            return RecordingPrompt()
+
+    def fake_run_sync(agent, input: str, max_turns: int):
+        assert input == "intent input"
+        assert max_turns == 2
+        return SimpleNamespace(final_output="intent output", new_items=[])
+
+    monkeypatch.setattr("chatbot.LLMObs", RecordingLLMObs)
+    monkeypatch.setattr("chatbot.Runner.run_sync", fake_run_sync)
+
+    result = _run_agent_with_annotation(
+        SimpleNamespace(name="IntentAgent"),
+        "devtools-council-intent",
+        "Extract intent.",
+        "intent input",
+        "intent",
+        "task-1",
+        "rum-1",
+        2,
+    )
+
+    agent_annotations = [annotation for annotation in annotations if annotation.get("span")]
+    assert result.final_output == "intent output"
+    assert ("agent", "IntentAgent", "rum-1") in spans
+    assert agent_annotations[0]["input_data"] == "intent input"
+    assert agent_annotations[0]["output_data"] == "intent output"
+    assert agent_annotations[0]["tags"]["agent.role"] == "intent"
+    assert agent_annotations[0]["tags"]["task.id"] == "task-1"
+
+
 def test_recommendation_council_uses_deterministic_search(monkeypatch: pytest.MonkeyPatch) -> None:
     """Council should retrieve candidates without a SearchAgent tool-call loop."""
     calls: list[str] = []
     search_inputs: list[str] = []
+    span_names: list[tuple[str, str, str | None]] = []
 
     def fake_search_startups(query: str, limit: int) -> list[dict[str, object]]:
         assert limit >= 1
@@ -175,6 +247,33 @@ def test_recommendation_council_uses_deterministic_search(monkeypatch: pytest.Mo
             return SimpleNamespace(final_output="Use **TraceKit** for production monitoring.", new_items=[])
         raise AssertionError(f"unexpected role: {role}")
 
+    class RecordingSpan:
+        def __init__(self, kind: str, name: str, session_id: str | None):
+            self.kind = kind
+            self.name = name
+            self.session_id = session_id
+
+        def __enter__(self):
+            span_names.append((self.kind, self.name, self.session_id))
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+    class RecordingLLMObs:
+        @classmethod
+        def workflow(cls, name: str, session_id: str | None = None):
+            return RecordingSpan("workflow", name, session_id)
+
+        @classmethod
+        def retrieval(cls, name: str, session_id: str | None = None):
+            return RecordingSpan("retrieval", name, session_id)
+
+        @classmethod
+        def annotate(cls, **kwargs):
+            return None
+
+    monkeypatch.setattr("chatbot.LLMObs", RecordingLLMObs)
     monkeypatch.setattr("chatbot.search_startups", fake_search_startups)
     monkeypatch.setattr("chatbot._run_agent_with_annotation", fake_run_agent)
 
@@ -185,6 +284,8 @@ def test_recommendation_council_uses_deterministic_search(monkeypatch: pytest.Mo
     assert result["workflow"] == "recommendation_council"
     assert result["response"] == "Use **TraceKit** for production monitoring."
     assert [tool["id"] for tool in result["tools"]] == [7]
+    assert ("workflow", "recommendation_council", "rum-1") in span_names
+    assert ("retrieval", "candidate_database_search", "rum-1") in span_names
     assert "Search queries used" in search_inputs[0]
     assert "Candidate tools JSON" in search_inputs[0]
 

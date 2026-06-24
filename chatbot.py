@@ -4,6 +4,9 @@ import json
 import os
 import re
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +151,69 @@ def _get_prompt_annotation(prompt_id: str, template: str) -> dict[str, Any]:
         return _prompt_tracking(prompt_id, template)
 
 
+@contextmanager
+def _llmobs_span(span_kind: str, name: str, session_id: str | None) -> Iterator[Any | None]:
+    """Open an LLMObs span while allowing older tracers to skip custom spans."""
+    if not span_kind.strip():
+        raise ValueError("span_kind must not be blank")
+    if not name.strip():
+        raise ValueError("name must not be blank")
+
+    span_factory = getattr(LLMObs, span_kind, None)
+    if span_factory is None:
+        yield None
+        return
+    try:
+        span_context = span_factory(name=name, session_id=session_id)
+    except Exception:
+        logger.debug(
+            "chatbot.llmobs_span_skipped",
+            extra={"event": "chatbot.llmobs_span_skipped", "span_kind": span_kind, "span_name": name},
+        )
+        yield None
+        return
+
+    with span_context as span:
+        yield span
+
+
+def _annotate_llmobs_span(
+    span: Any | None,
+    *,
+    input_data: Any | None = None,
+    output_data: Any | None = None,
+    metadata: dict[str, Any] | None = None,
+    tags: dict[str, str] | None = None,
+) -> None:
+    """Attach input, output, metadata, and tags to an LLMObs span."""
+    if metadata is not None and not isinstance(metadata, dict):
+        raise TypeError("metadata must be a dictionary")
+    if tags is not None and not isinstance(tags, dict):
+        raise TypeError("tags must be a dictionary")
+    if span is None:
+        return
+
+    payload: dict[str, Any] = {}
+    if input_data is not None:
+        payload["input_data"] = input_data
+    if output_data is not None:
+        payload["output_data"] = output_data
+    if metadata is not None:
+        payload["metadata"] = metadata
+    if tags is not None:
+        payload["tags"] = tags
+    if not payload:
+        return
+
+    annotate = getattr(LLMObs, "annotate", None)
+    if annotate is None:
+        return
+    try:
+        annotate(span=span, **payload)
+    except Exception:
+        logger.debug("chatbot.annotation_skipped", extra={"event": "chatbot.annotation_skipped"})
+
+
 def _annotate_current_span(tags: dict[str, str]) -> None:
     """Attach tags to the active LLM span when LLMObs supports annotation."""
     if not isinstance(tags, dict):
@@ -161,6 +227,23 @@ def _annotate_current_span(tags: dict[str, str]) -> None:
         annotate(span=None, tags=tags)
     except Exception:
         logger.debug("chatbot.annotation_skipped", extra={"event": "chatbot.annotation_skipped"})
+
+
+def _council_tags(task_id: str, role: str | None = None) -> dict[str, str]:
+    """Build common Datadog tags for one recommendation council trace."""
+    if not task_id.strip():
+        raise ValueError("task_id must not be blank")
+    if role is not None and not role.strip():
+        raise ValueError("role must not be blank")
+
+    tags = {
+        "workflow.name": _WORKFLOW_NAME,
+        "task.id": task_id,
+        "model.name": _COUNCIL_MODEL,
+    }
+    if role is not None:
+        tags["agent.role"] = role
+    return tags
 
 
 def _sanitize_fts_query(query: str) -> str:
@@ -347,6 +430,50 @@ def _candidate_payload(candidates: list[dict[str, Any]]) -> str:
     return json.dumps(compact_candidates, ensure_ascii=False)
 
 
+def _retrieval_documents(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Format local search results for Datadog retrieval span output."""
+    if not isinstance(candidates, list):
+        raise TypeError("candidates must be a list")
+
+    documents: list[dict[str, Any]] = []
+    for candidate in candidates[:_MAX_TOOLS_IN_CONTEXT]:
+        if not isinstance(candidate, dict):
+            continue
+        candidate_id = candidate.get("id")
+        documents.append(
+            {
+                "id": str(candidate_id) if candidate_id is not None else "unknown",
+                "name": str(candidate.get("name") or "Unknown tool")[:120],
+                "text": str(candidate.get("description") or "")[:500],
+                "score": 1.0,
+            }
+        )
+    return documents
+
+
+def _retrieve_candidate_tools(
+    queries: list[str],
+    session_id: str | None,
+    task_id: str,
+) -> list[dict[str, Any]]:
+    """Search local tools inside a Datadog retrieval span."""
+    if not queries:
+        raise ValueError("queries must not be empty")
+    if not task_id.strip():
+        raise ValueError("task_id must not be blank")
+
+    with _llmobs_span("retrieval", "candidate_database_search", session_id) as retrieval_span:
+        candidates = _manual_search_candidates(queries)
+        _annotate_llmobs_span(
+            retrieval_span,
+            input_data={"queries": queries},
+            output_data=_retrieval_documents(candidates),
+            metadata={"candidate_count": len(candidates), "task_id": task_id},
+            tags=_council_tags(task_id),
+        )
+        return candidates
+
+
 def _ids_from_review(text: str, key: str) -> list[str]:
     """Extract ordered tool IDs from a review JSON object."""
     if not key.strip():
@@ -434,6 +561,16 @@ def _normalize_workflow(workflow: str | None) -> str:
     return "council"
 
 
+def _agent_span_name(agent: Agent, role: str) -> str:
+    """Return a stable display name for a council agent span."""
+    if role not in _COUNCIL_ROLES:
+        raise ValueError(f"unsupported council role: {role}")
+    agent_name = getattr(agent, "name", None)
+    if isinstance(agent_name, str) and agent_name.strip():
+        return agent_name.strip()
+    return f"{role.title()}Agent"
+
+
 def _run_agent_with_annotation(
     agent: Agent,
     prompt_id: str,
@@ -444,23 +581,29 @@ def _run_agent_with_annotation(
     session_id: str | None,
     max_turns: int,
 ) -> Any:
-    """Run one council agent with Datadog prompt and workflow metadata."""
+    """Run one council agent inside a Datadog agent span."""
     if role not in _COUNCIL_ROLES:
         raise ValueError(f"unsupported council role: {role}")
     if not agent_input.strip():
         raise ValueError("agent_input must not be blank")
 
-    with LLMObs.annotation_context(prompt=_get_prompt_annotation(prompt_id, prompt_template)):
-        result = Runner.run_sync(agent, input=agent_input, max_turns=max_turns)
-        tags = {
-            "workflow.name": _WORKFLOW_NAME,
-            "agent.role": role,
-            "task.id": task_id,
-            "model.name": _COUNCIL_MODEL,
-        }
-        if session_id:
-            tags["session_id"] = session_id
-        _annotate_current_span(tags)
+    tags = _council_tags(task_id, role)
+    if session_id:
+        tags["session_id"] = session_id
+
+    with _llmobs_span("agent", _agent_span_name(agent, role), session_id) as agent_span:
+        with LLMObs.annotation_context(prompt=_get_prompt_annotation(prompt_id, prompt_template)):
+            result = Runner.run_sync(agent, input=agent_input, max_turns=max_turns)
+            _annotate_current_span(tags)
+
+        result_text = _result_text(result)
+        _annotate_llmobs_span(
+            agent_span,
+            input_data=agent_input,
+            output_data=result_text,
+            metadata={"prompt_id": prompt_id, "max_turns": max_turns, "model": _COUNCIL_MODEL},
+            tags=tags,
+        )
         return result
 
 
@@ -563,6 +706,100 @@ _writer_agent = Agent(
 )
 
 
+@dataclass(frozen=True)
+class _CouncilRun:
+    """Result of one recommendation council execution."""
+
+    response_text: str
+    selected_tools: list[dict[str, Any]]
+    candidate_count: int
+
+
+def _run_council_agents(
+    user_message: str,
+    session_id: str | None,
+    task_id: str,
+) -> _CouncilRun:
+    """Execute council agents in order and return final response data."""
+    if not user_message.strip():
+        raise ValueError("user_message must not be blank")
+    if not task_id.strip():
+        raise ValueError("task_id must not be blank")
+
+    intent_result = _run_agent_with_annotation(
+        _intent_agent,
+        "devtools-council-intent",
+        _INTENT_PROMPT,
+        user_message,
+        "intent",
+        task_id,
+        session_id,
+        _COUNCIL_MAX_TURNS,
+    )
+    intent_text = _result_text(intent_result)
+    queries = _queries_from_intent(intent_text, user_message)
+
+    candidates = _retrieve_candidate_tools(queries, session_id, task_id)
+    candidate_json = _candidate_payload(candidates)
+    _run_agent_with_annotation(
+        _search_agent,
+        "devtools-council-search",
+        _SEARCH_PROMPT,
+        _build_search_input(user_message, intent_text, queries, candidate_json),
+        "search",
+        task_id,
+        session_id,
+        _COUNCIL_MAX_TURNS,
+    )
+
+    evaluation_result = _run_agent_with_annotation(
+        _evaluator_agent,
+        "devtools-council-evaluator",
+        _EVALUATOR_PROMPT,
+        _build_review_input(user_message, intent_text, candidate_json),
+        "evaluator",
+        task_id,
+        session_id,
+        _COUNCIL_MAX_TURNS,
+    )
+    evaluation_text = _result_text(evaluation_result)
+
+    skeptic_result = _run_agent_with_annotation(
+        _skeptic_agent,
+        "devtools-council-skeptic",
+        _SKEPTIC_PROMPT,
+        _build_review_input(user_message, intent_text, candidate_json, evaluation_text),
+        "skeptic",
+        task_id,
+        session_id,
+        _COUNCIL_MAX_TURNS,
+    )
+    skeptic_text = _result_text(skeptic_result)
+    selected_tools = _select_response_tools(candidates, evaluation_text, skeptic_text)
+    selected_json = _candidate_payload(selected_tools)
+
+    writer_result = _run_agent_with_annotation(
+        _writer_agent,
+        "devtools-council-writer",
+        _WRITER_PROMPT,
+        _build_writer_input(user_message, selected_json, evaluation_text, skeptic_text),
+        "writer",
+        task_id,
+        session_id,
+        _COUNCIL_MAX_TURNS,
+    )
+    response_text = _result_text(writer_result) or _fallback_council_response(
+        user_message,
+        selected_tools,
+    )
+
+    return _CouncilRun(
+        response_text=response_text,
+        selected_tools=selected_tools,
+        candidate_count=len(candidates),
+    )
+
+
 def generate_recommendation_council_response(
     user_message: str,
     session_id: str | None = None,
@@ -573,93 +810,54 @@ def generate_recommendation_council_response(
 
     task_id = str(uuid.uuid4())
     try:
-        intent_result = _run_agent_with_annotation(
-            _intent_agent,
-            "devtools-council-intent",
-            _INTENT_PROMPT,
-            user_message,
-            "intent",
-            task_id,
-            session_id,
-            _COUNCIL_MAX_TURNS,
-        )
-        intent_text = _result_text(intent_result)
-        queries = _queries_from_intent(intent_text, user_message)
+        with _llmobs_span("workflow", _WORKFLOW_NAME, session_id) as workflow_span:
+            workflow_tags = _council_tags(task_id)
+            if session_id:
+                workflow_tags["session_id"] = session_id
+            _annotate_llmobs_span(
+                workflow_span,
+                input_data=user_message,
+                metadata={
+                    "task_id": task_id,
+                    "model": _COUNCIL_MODEL,
+                    "agents": _COUNCIL_AGENT_NAMES,
+                },
+                tags=workflow_tags,
+            )
 
-        candidates = _manual_search_candidates(queries)
-        candidate_json = _candidate_payload(candidates)
-        _run_agent_with_annotation(
-            _search_agent,
-            "devtools-council-search",
-            _SEARCH_PROMPT,
-            _build_search_input(user_message, intent_text, queries, candidate_json),
-            "search",
-            task_id,
-            session_id,
-            _COUNCIL_MAX_TURNS,
-        )
-
-        evaluation_result = _run_agent_with_annotation(
-            _evaluator_agent,
-            "devtools-council-evaluator",
-            _EVALUATOR_PROMPT,
-            _build_review_input(user_message, intent_text, candidate_json),
-            "evaluator",
-            task_id,
-            session_id,
-            _COUNCIL_MAX_TURNS,
-        )
-        evaluation_text = _result_text(evaluation_result)
-
-        skeptic_result = _run_agent_with_annotation(
-            _skeptic_agent,
-            "devtools-council-skeptic",
-            _SKEPTIC_PROMPT,
-            _build_review_input(user_message, intent_text, candidate_json, evaluation_text),
-            "skeptic",
-            task_id,
-            session_id,
-            _COUNCIL_MAX_TURNS,
-        )
-        skeptic_text = _result_text(skeptic_result)
-        selected_tools = _select_response_tools(candidates, evaluation_text, skeptic_text)
-        selected_json = _candidate_payload(selected_tools)
-
-        writer_result = _run_agent_with_annotation(
-            _writer_agent,
-            "devtools-council-writer",
-            _WRITER_PROMPT,
-            _build_writer_input(user_message, selected_json, evaluation_text, skeptic_text),
-            "writer",
-            task_id,
-            session_id,
-            _COUNCIL_MAX_TURNS,
-        )
-        response_text = _result_text(writer_result) or _fallback_council_response(
-            user_message,
-            selected_tools,
-        )
-
-        logger.info(
-            "chatbot.council.response",
-            extra={
-                "event": "chatbot.council.response",
-                "task_id": task_id,
-                "message_length": len(user_message),
-                "candidate_count": len(candidates),
-                "tools_found": len(selected_tools),
-                "response_length": len(response_text),
+            council_run = _run_council_agents(user_message, session_id, task_id)
+            _annotate_llmobs_span(
+                workflow_span,
+                output_data=council_run.response_text,
+                metadata={
+                    "task_id": task_id,
+                    "candidate_count": council_run.candidate_count,
+                    "tools_found": len(council_run.selected_tools),
+                    "response_length": len(council_run.response_text),
+                    "model": _COUNCIL_MODEL,
+                },
+                tags=workflow_tags,
+            )
+            logger.info(
+                "chatbot.council.response",
+                extra={
+                    "event": "chatbot.council.response",
+                    "task_id": task_id,
+                    "message_length": len(user_message),
+                    "candidate_count": council_run.candidate_count,
+                    "tools_found": len(council_run.selected_tools),
+                    "response_length": len(council_run.response_text),
+                    "model": _COUNCIL_MODEL,
+                },
+            )
+            return {
+                "response": council_run.response_text,
+                "tools": council_run.selected_tools,
+                "workflow": _WORKFLOW_NAME,
+                "agents": _COUNCIL_AGENT_NAMES,
                 "model": _COUNCIL_MODEL,
-            },
-        )
-        return {
-            "response": response_text,
-            "tools": selected_tools,
-            "workflow": _WORKFLOW_NAME,
-            "agents": _COUNCIL_AGENT_NAMES,
-            "model": _COUNCIL_MODEL,
-            "task_id": task_id,
-        }
+                "task_id": task_id,
+            }
 
     except Exception:
         logger.exception(

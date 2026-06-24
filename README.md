@@ -36,7 +36,7 @@ The chat widget runs a multi-agent Recommendation Council by default. It uses th
 - `SkepticAgent` removes weak or unsupported matches.
 - `WriterAgent` turns approved candidates into the final response.
 
-The workflow tags Datadog LLM spans with `workflow.name`, `agent.role`, `task.id`, and `model.name` where LLMObs span annotation is available. Set `CHATBOT_WORKFLOW=simple` to use the original single-agent assistant.
+The workflow creates a Datadog Agent Observability workflow span with nested agent spans for each council role and a retrieval span for the local database search. Spans are tagged with `workflow.name`, `agent.role`, `task.id`, and `model.name` so the Datadog trace graph can show the council flow. Set `CHATBOT_WORKFLOW=simple` to use the original single-agent assistant.
 
 The default model is `gpt-5-nano`, selected because it is newer than the previous `gpt-4o-mini` default and priced for low-cost agent routing plus compact classification and summary work. OpenAI's model docs list it for Agents SDK use, and this council workflow mainly needs tool calls plus short synthesis. Override `CHATBOT_MODEL` or `CHATBOT_COUNCIL_MODEL` in `.env` to compare cost and latency against response quality.
 
