@@ -61,15 +61,13 @@ Important variables:
 
 Change these tags when you want to separate experiments. For example, set `DD_SERVICE=agent-observability-sandbox-yourname` before comparing traces with a teammate.
 
-## Expected telemetry
+## Datadog features enabled by default
 
-After `docker compose up --build`, Datadog should receive:
+After `docker compose up --build`, the app runs with Datadog Agent 7 and Python `ddtrace` enabled. The default compose settings send Flask request traces, app container logs, Python runtime metrics, profiler data, DogStatsD traffic, exception replay data, code-origin metadata for spans, and LLM Observability spans for chatbot or classifier calls.
 
-- Flask request traces for page loads and API calls.
-- Container logs from the app service.
-- Runtime metrics from the Python tracer.
-- Profiling data when profiling is enabled.
-- LLM Observability or Agent Observability spans when the chatbot or classifier calls OpenAI.
+Agent Observability is enabled through `DD_LLMOBS_ENABLED=1`. The chat widget uses the OpenAI Agents SDK Recommendation Council by default, so a browser chat should create an Agent Observability graph with handoff spans and a `search_tools` tool call. Prompt Management and prompt metadata paths are available when the configured Datadog account can return managed prompts; local fallback prompts keep the app running when it cannot.
+
+RUM is configured but inactive until `DATADOG_RUM_APPLICATION_ID` and `DATADOG_RUM_CLIENT_TOKEN` are set. Dynamic Instrumentation, Live Debugging, AppSec, IAST, and the Process Agent are disabled by default so the sandbox starts with low-risk telemetry.
 
 Run a chat request from the browser to create an LLM span. You can also call the API directly:
 
@@ -104,6 +102,10 @@ docker compose exec app ddtrace-run python scrape_all.py
 ```
 
 If you want Product Hunt API coverage, add `PRODUCTHUNT_CLIENT_ID` and `PRODUCTHUNT_CLIENT_SECRET` to `.env` first.
+
+## Project ideas
+
+See [`project_ideas`](../project_ideas/) for build ideas that extend this sandbox. The directory covers evaluations, Datadog Experiments, datasets, Prompt Management, Prompt Tracking, and Prompt Optimization in the context of the Recommendation Council.
 
 ## Troubleshooting
 
@@ -165,15 +167,3 @@ python scripts/create_sandbox_seed.py data/startups.db --output /tmp/startups.db
 ### Wrong Datadog region
 
 A valid API key for one site will not send data to another site. Match `DD_SITE` to the site where you created the API key. Common values include `datadoghq.com`, `datadoghq.eu`, `us3.datadoghq.com`, `us5.datadoghq.com`, and `ap1.datadoghq.com`.
-
-## No-emoji rule
-
-Do not add emoji to docs, code comments, scripts, log messages, examples, commit messages, or generated project output.
-
-Run the check:
-
-```bash
-python scripts/check-no-emoji.py
-```
-
-The pytest suite also runs this check.
