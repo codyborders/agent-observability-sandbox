@@ -177,6 +177,20 @@ def _llmobs_span(span_kind: str, name: str, session_id: str | None) -> Iterator[
         yield span
 
 
+def _call_llmobs_annotate(**payload: Any) -> None:
+    """Call LLMObs.annotate when available without breaking chat responses."""
+    if not payload:
+        return
+
+    annotate = getattr(LLMObs, "annotate", None)
+    if annotate is None:
+        return
+    try:
+        annotate(**payload)
+    except Exception:
+        logger.debug("chatbot.annotation_skipped", extra={"event": "chatbot.annotation_skipped"})
+
+
 def _annotate_llmobs_span(
     span: Any | None,
     *,
@@ -193,7 +207,7 @@ def _annotate_llmobs_span(
     if span is None:
         return
 
-    payload: dict[str, Any] = {}
+    payload: dict[str, Any] = {"span": span}
     if input_data is not None:
         payload["input_data"] = input_data
     if output_data is not None:
@@ -202,16 +216,10 @@ def _annotate_llmobs_span(
         payload["metadata"] = metadata
     if tags is not None:
         payload["tags"] = tags
-    if not payload:
+    if len(payload) == 1:
         return
 
-    annotate = getattr(LLMObs, "annotate", None)
-    if annotate is None:
-        return
-    try:
-        annotate(span=span, **payload)
-    except Exception:
-        logger.debug("chatbot.annotation_skipped", extra={"event": "chatbot.annotation_skipped"})
+    _call_llmobs_annotate(**payload)
 
 
 def _annotate_current_span(tags: dict[str, str]) -> None:
@@ -220,13 +228,7 @@ def _annotate_current_span(tags: dict[str, str]) -> None:
         raise TypeError("tags must be a dictionary")
     if not tags:
         return
-    annotate = getattr(LLMObs, "annotate", None)
-    if annotate is None:
-        return
-    try:
-        annotate(span=None, tags=tags)
-    except Exception:
-        logger.debug("chatbot.annotation_skipped", extra={"event": "chatbot.annotation_skipped"})
+    _call_llmobs_annotate(span=None, tags=tags)
 
 
 def _council_tags(task_id: str, role: str | None = None) -> dict[str, str]:

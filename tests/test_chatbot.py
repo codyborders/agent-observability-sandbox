@@ -19,6 +19,29 @@ from chatbot import (
 )
 
 
+class _RecordingSpan:
+    """Context manager that records span kind, name, and session id."""
+
+    def __init__(
+        self,
+        spans: list[tuple[str, str, str | None]],
+        kind: str,
+        name: str,
+        session_id: str | None = None,
+    ) -> None:
+        self._spans = spans
+        self.kind = kind
+        self.name = name
+        self.session_id = session_id
+
+    def __enter__(self) -> "_RecordingSpan":
+        self._spans.append((self.kind, self.name, self.session_id))
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> bool:
+        return False
+
+
 @pytest.mark.parametrize(
     "raw, expected",
     [
@@ -135,19 +158,6 @@ def test_run_agent_with_annotation_creates_agent_span(monkeypatch: pytest.Monkey
     spans: list[tuple[str, str, str | None]] = []
     annotations: list[dict[str, object]] = []
 
-    class RecordingSpan:
-        def __init__(self, kind: str, name: str, session_id: str | None = None):
-            self.kind = kind
-            self.name = name
-            self.session_id = session_id
-
-        def __enter__(self):
-            spans.append((self.kind, self.name, self.session_id))
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            return False
-
     class RecordingPrompt:
         def to_annotation_dict(self):
             return {"id": "devtools-council-intent", "version": "test"}
@@ -155,11 +165,11 @@ def test_run_agent_with_annotation_creates_agent_span(monkeypatch: pytest.Monkey
     class RecordingLLMObs:
         @classmethod
         def agent(cls, name: str, session_id: str | None = None):
-            return RecordingSpan("agent", name, session_id)
+            return _RecordingSpan(spans, "agent", name, session_id)
 
         @classmethod
         def annotation_context(cls, **kwargs):
-            return RecordingSpan("annotation_context", "prompt")
+            return _RecordingSpan(spans, "annotation_context", "prompt")
 
         @classmethod
         def annotate(cls, **kwargs):
@@ -247,27 +257,14 @@ def test_recommendation_council_uses_deterministic_search(monkeypatch: pytest.Mo
             return SimpleNamespace(final_output="Use **TraceKit** for production monitoring.", new_items=[])
         raise AssertionError(f"unexpected role: {role}")
 
-    class RecordingSpan:
-        def __init__(self, kind: str, name: str, session_id: str | None):
-            self.kind = kind
-            self.name = name
-            self.session_id = session_id
-
-        def __enter__(self):
-            span_names.append((self.kind, self.name, self.session_id))
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            return False
-
     class RecordingLLMObs:
         @classmethod
         def workflow(cls, name: str, session_id: str | None = None):
-            return RecordingSpan("workflow", name, session_id)
+            return _RecordingSpan(span_names, "workflow", name, session_id)
 
         @classmethod
         def retrieval(cls, name: str, session_id: str | None = None):
-            return RecordingSpan("retrieval", name, session_id)
+            return _RecordingSpan(span_names, "retrieval", name, session_id)
 
         @classmethod
         def annotate(cls, **kwargs):
