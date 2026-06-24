@@ -2,6 +2,8 @@
 
 Agent Observability Sandbox is a local teaching repo for the DevTools Scrape app and Datadog telemetry. Use it to change features, trigger LLM calls, inspect traces, compare logs, and test optional RUM without connecting to the production deployment.
 
+Start with the [Sandbox Guide](docs/sandbox.md) for setup details, default Datadog features, and troubleshooting.
+
 Your clone reports to your Datadog account. Put credentials in `.env`, change the service and environment tags as needed, and reset the local database whenever an experiment gets messy.
 
 ## Requirements
@@ -102,5 +104,3 @@ Convenience wrapper:
 ```bash
 bash scripts/run-tests.sh
 ```
-
-More details are in `docs/sandbox.md`.
