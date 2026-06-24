@@ -39,9 +39,9 @@ SENSITIVE_TEXT_MARKERS = (
     "DATADOG_API_KEY",
     "DD_API_KEY",
     "Application%3A+devtoolscrape",
-    "sk-",
 )
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+SECRET_TOKEN_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
 
 
 class SeedValidationError(ValueError):
@@ -111,6 +111,8 @@ def _validate_no_sensitive_text(connection: sqlite3.Connection) -> None:
                 raise SeedValidationError(f"sensitive text marker found in startup row {row_id}")
         if EMAIL_PATTERN.search(startup_text):
             raise SeedValidationError(f"email-like text found in startup row {row_id}")
+        if SECRET_TOKEN_PATTERN.search(startup_text):
+            raise SeedValidationError(f"secret-like token found in startup row {row_id}")
 
 
 def validate_database(database_path: Path) -> int:

@@ -26,7 +26,7 @@ Open `http://localhost:8000` and check `http://localhost:8000/health`.
 
 ## Database seed
 
-The sandbox ships with `seed/startups.db.gz`. On first boot, the entrypoint restores it to `data/startups.db` when the target file is absent or empty.
+The sandbox ships with `seed/startups.db.gz`, a sanitized copy of the full DevTools Scrape corpus. On first boot, the entrypoint restores it to `data/startups.db` when the target file is absent or empty.
 
 Existing nonempty databases are preserved. This lets you experiment with data changes and restart containers without losing work.
 
@@ -38,13 +38,14 @@ python scripts/restore_sandbox_db.py --force
 docker compose up --build
 ```
 
-To regenerate the fixture from another SQLite database:
+To regenerate the fixture from another SQLite database, sanitize the source copy first, then package the sanitized database:
 
 ```bash
-python scripts/create_sandbox_seed.py path/to/startups.db --output seed/startups.db.gz
+python scripts/sanitize_sandbox_db.py path/to/startups.db /tmp/startups-sanitized.db
+python scripts/create_sandbox_seed.py /tmp/startups-sanitized.db --output seed/startups.db.gz
 ```
 
-The seed tool validates SQLite integrity, schema shape, public columns, row count, and secret-looking text before writing the compressed fixture.
+The sanitizer strips Product Hunt API tracking query strings and redacts email addresses plus secret-looking tokens. The seed tool then validates SQLite integrity, schema shape, public columns, row count, and secret-looking text before writing the compressed fixture.
 
 ## Datadog account isolation
 

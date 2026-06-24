@@ -20,6 +20,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 import create_sandbox_seed  # noqa: E402
 import restore_sandbox_db  # noqa: E402
+import sanitize_sandbox_db  # noqa: E402
 
 
 def _create_valid_database(database_path: Path) -> None:
@@ -140,6 +141,35 @@ def test_validate_database_rejects_email_like_text(tmp_path: Path) -> None:
         create_sandbox_seed.validate_database(database_path)
 
 
+def test_validate_database_rejects_secret_like_tokens(tmp_path: Path) -> None:
+    """Public seed fixtures should reject realistic secret token patterns."""
+    database_path = tmp_path / "source.db"
+    _create_valid_database(database_path)
+    with sqlite3.connect(str(database_path)) as connection:
+        connection.execute("PRAGMA trusted_schema=ON")
+        connection.execute(
+            "UPDATE startups SET description = ? WHERE id = 1",
+            ("Example token sk-abcdefghijklmnopqrstuvwxyz012345 for docs.",),
+        )
+
+    with pytest.raises(create_sandbox_seed.SeedValidationError, match="secret-like token"):
+        create_sandbox_seed.validate_database(database_path)
+
+
+def test_validate_database_allows_public_sk_substrings(tmp_path: Path) -> None:
+    """Harmless words containing sk hyphen should not block public fixtures."""
+    database_path = tmp_path / "source.db"
+    _create_valid_database(database_path)
+    with sqlite3.connect(str(database_path)) as connection:
+        connection.execute("PRAGMA trusted_schema=ON")
+        connection.execute(
+            "UPDATE startups SET description = ? WHERE id = 1",
+            ("Risk-free task-specific tooling for disk-based tests.",),
+        )
+
+    assert create_sandbox_seed.validate_database(database_path) == 1
+
+
 def test_validate_database_rejects_product_hunt_tracking_source(tmp_path: Path) -> None:
     """Public seed fixtures should not expose source app tracking identifiers."""
     database_path = tmp_path / "source.db"
@@ -153,6 +183,37 @@ def test_validate_database_rejects_product_hunt_tracking_source(tmp_path: Path) 
 
     with pytest.raises(create_sandbox_seed.SeedValidationError, match="sensitive text marker"):
         create_sandbox_seed.validate_database(database_path)
+
+
+def test_sanitize_database_scrubs_public_fixture_text(tmp_path: Path) -> None:
+    """Sanitizer should remove sensitive text while preserving seed validity."""
+    source_path = tmp_path / "source.db"
+    sanitized_path = tmp_path / "sanitized.db"
+    _create_valid_database(source_path)
+    with sqlite3.connect(str(source_path)) as connection:
+        connection.execute("PRAGMA trusted_schema=ON")
+        connection.execute(
+            """
+            UPDATE startups
+            SET url = ?, description = ?
+            WHERE id = 1
+            """,
+            (
+                "https://www.producthunt.com/products/example?utm_source=Application%3A+devtoolscrape",
+                "Use OPENAI_API_KEY or person@example.com with sk-abcdefghijklmnopqrstuvwxyz012345.",
+            ),
+        )
+
+    changed_rows = sanitize_sandbox_db.sanitize_database(source_path, sanitized_path)
+
+    assert changed_rows == 1
+    assert create_sandbox_seed.validate_database(sanitized_path) == 1
+    with sqlite3.connect(str(sanitized_path)) as connection:
+        row = connection.execute("SELECT url, description FROM startups WHERE id = 1").fetchone()
+    assert row[0] == "https://www.producthunt.com/products/example"
+    assert "OPENAI_API_KEY" not in row[1]
+    assert "person@example.com" not in row[1]
+    assert "sk-abcdefghijklmnopqrstuvwxyz012345" not in row[1]
 
 
 def test_restore_creates_missing_target(tmp_path: Path) -> None:
